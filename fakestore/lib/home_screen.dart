@@ -1,93 +1,115 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'favorites_screen.dart';
-import 'product_row.dart';
-import 'providers.dart';
+import 'product_bloc.dart';
+import 'product_card.dart';
+import 'product_event.dart';
+import 'product_state.dart';
 
-class HomeScreen extends ConsumerStatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-  @override
-  ConsumerState<HomeScreen> createState() =>
-      _HomeScreenState();
-}
-
-class _HomeScreenState
-    extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(
-        length: 1, vsync: this);
-  }
 
   @override
   Widget build(BuildContext context) {
-    final categoriesAsync =
-        ref.watch(categoriesProvider);
-    final productsAsync =
-        ref.watch(productsProvider);
-    return categoriesAsync.when(
-      data: (cats) {
-        final tabs = ['All', ...cats];
-        return DefaultTabController(
-          length: tabs.length,
-          child: Scaffold(
-            appBar: AppBar(
-              title: const Text('Fakestore Deals'),
-              bottom: TabBar(
-                isScrollable: true,
-                tabs: tabs
-                    .map((t) => Tab(text: t))
-                    .toList(),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.favorite),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const FavoritesScreen(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            body: productsAsync.when(
-              data: (allProducts) => TabBarView(
-                children: tabs.map((tab) {
-                  final list = tab == 'All'
-                      ? allProducts
-                      : allProducts
-                          .where((p) =>
-                              p.category == tab)
-                          .toList()
-                        ..sort((a, b) => b.rating
-                            .compareTo(a.rating));
-                  return ListView.builder(
-                    itemCount: list.length,
-                    itemBuilder: (_, i) =>
-                        ProductRow(list[i]),
-                  );
-                }).toList(),
-              ),
-              loading: () => const Center(
-                  child:
-                      CircularProgressIndicator()),
-              error: (e, _) =>
-                  Center(child: Text('Error: $e')),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Product Explorer'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.favorite),
+            tooltip: 'Favorites',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FavoritesScreen()),
             ),
           ),
-        );
-      },
-      loading: () => const Center(
-          child: CircularProgressIndicator()),
-      error: (e, _) =>
-          Center(child: Text('Error: $e')),
+        ],
+      ),
+      body: BlocBuilder<ProductBloc, ProductState>(
+        builder: (context, state) {
+          if (state.loading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state.error != null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Error: ${state.error}',
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: () =>
+                          context.read<ProductBloc>().add(LoadProducts()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          final products = state.visibleProducts;
+          return Column(
+            children: [
+              // Search field
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search products',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (q) =>
+                      context.read<ProductBloc>().add(SearchProducts(q)),
+                ),
+              ),
+              // Category chips
+              SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  children: [null, ...state.categories].map((cat) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text(cat ?? 'All'),
+                        selected: state.selectedCategory == cat,
+                        onSelected: (_) => context
+                            .read<ProductBloc>()
+                            .add(FilterByCategory(cat)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              // Product grid
+              Expanded(
+                child: products.isEmpty
+                    ? const Center(child: Text('No products found'))
+                    : GridView.builder(
+                        padding: const EdgeInsets.all(8),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 220,
+                          childAspectRatio: 0.7,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                        ),
+                        itemCount: products.length,
+                        itemBuilder: (_, i) =>
+                            ProductCard(product: products[i]),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

@@ -1,63 +1,50 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'providers.dart';
+import 'favorites_cubit.dart';
+import 'product_bloc.dart';
+import 'product_detail_screen.dart';
 
-class FavoritesScreen extends ConsumerWidget {
+class FavoritesScreen extends StatelessWidget {
   const FavoritesScreen({super.key});
 
   @override
-  Widget build(
-      BuildContext context, WidgetRef ref) {
-    final favIds = ref.watch(favoritesProvider);
-    final productsAsync =
-        ref.watch(productsProvider);
+  Widget build(BuildContext context) {
+    final favIds = context.watch<FavoritesCubit>().state;
+    final all = context.watch<ProductBloc>().state.allProducts;
+    final favs = all.where((p) => favIds.contains(p.id)).toList();
+
     return Scaffold(
-      appBar: AppBar(
-          title: const Text('Favorites')),
-      body: productsAsync.when(
-        data: (all) {
-          final favs = all
-              .where((p) => favIds.contains(p.id))
-              .toList();
-          if (favs.isEmpty) {
-            return const Center(
-                child: Text('No favorites yet'));
-          }
-          return SizedBox(
-            height: 220,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
+      appBar: AppBar(title: const Text('Favorites')),
+      body: favs.isEmpty
+          ? const Center(child: Text('No favorites yet'))
+          : ListView.builder(
               itemCount: favs.length,
               itemBuilder: (_, i) {
                 final p = favs[i];
-                return Card(
-                  margin:
-                      const EdgeInsets.all(8),
-                  child: SizedBox(
-                    width: 150,
-                    child: Column(
-                      children: [
-                        Image.network(p.image,
-                            height: 100),
-                        Text(p.title,
-                            maxLines: 1,
-                            overflow: TextOverflow
-                                .ellipsis),
-                        Text('\$${p.price}'),
-                      ],
-                    ),
+                return ListTile(
+                  leading: Image.network(
+                    p.image,
+                    width: 48,
+                    errorBuilder: (_, _, _) =>
+                        const Icon(Icons.image_not_supported),
+                  ),
+                  title: Text(p.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('\$${p.price.toStringAsFixed(2)}'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () =>
+                        context.read<FavoritesCubit>().toggle(p.id),
+                  ),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => ProductDetailScreen(p)),
                   ),
                 );
               },
             ),
-          );
-        },
-        loading: () => const Center(
-            child: CircularProgressIndicator()),
-        error: (e, _) =>
-            Center(child: Text('Error: $e')),
-      ),
     );
   }
 }
